@@ -1,0 +1,16 @@
+# Forked repos (separate git repositories)
+agave/
+kit/
+
+# Build artifacts
+test-ledger/
+node_modules/
+*.js
+!demo-app/demo.js
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.cursor/

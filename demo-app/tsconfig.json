@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "moduleResolution": "Node",
+    "module": "CommonJS",
+    "paths": {
+      "@solana/kit": ["../kit/packages/kit/src/index.ts"],
+      "@solana/*": ["../kit/packages/*/src/index.ts"]
+    }
+  },
+  "ts-node": {
+    "esm": true,
+    "require": ["tsconfig-paths/register"]
+  }
+}
