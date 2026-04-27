@@ -1,56 +1,116 @@
-# Solana PQC Demo (Гибридные аккаунты)
+# Solana PQC: Post-Quantum Cryptography for Solana
 
-Это руководство описывает, как локально запустить модифицированный Solana-валидатор (Agave) и протестировать его работу с помощью форка клиентской библиотеки (kit).
+Proof-of-concept enabling **V1 transactions** (SIMD-0385) on Solana as groundwork for Post-Quantum Cryptography integration.
 
-## 1. Запуск локального валидатора (Agave)
+V1 transactions use a **messageFirst** wire format, which is essential for supporting larger PQC signatures (e.g., Falcon-512) that don't fit into the legacy signaturesFirst envelope.
 
-Откройте **новый терминал**, перейдите в папку `agave` и запустите скомпилированный локальный тест-валидатор:
+## Repository Structure
+
+This project spans 3 repositories:
+
+| Repository | Description |
+|-----------|-------------|
+| **[solana-pqc](https://github.com/SomovMike/solana-pqc)** (this repo) | Demo app, documentation |
+| **[agave](https://github.com/SomovMike/agave/tree/pqc/enable-v1)** (fork, branch `pqc/enable-v1`) | Modified Solana validator |
+| **[kit](https://github.com/SomovMike/kit/tree/pqc/enable-v1)** (fork, branch `pqc/enable-v1`) | Modified TypeScript client library |
+
+## Quick Start
+
+### 1. Clone everything
+
+```bash
+git clone https://github.com/SomovMike/solana-pqc.git
+cd solana-pqc
+git clone -b pqc/enable-v1 https://github.com/SomovMike/agave.git
+git clone -b pqc/enable-v1 https://github.com/SomovMike/kit.git
+```
+
+This gives the required directory structure (the demo app references `../kit/` for TypeScript imports):
+
+```
+solana-pqc/
+├── agave/           # Solana validator fork
+├── kit/             # @solana/kit client library fork
+├── demo-app/        # V1 transaction demo
+├── PROJECT.md       # Full project vision
+└── V1_CHANGES.md    # Detailed changelog
+```
+
+### 2. Build the validator
 
 ```bash
 cd agave
-./target/debug/solana-test-validator --reset
+cargo build --bin solana-test-validator
 ```
 
-*Флаг `--reset` очищает старое состояние локальной сети (Ledger) при каждом запуске, чтобы начинать с чистого листа.*
+> First build takes ~15-20 minutes. Subsequent builds are incremental (~2 min).
 
-> **Примечание:** Если вы будете вносить изменения в ядро (например, добавлять PQC-верификацию в `sigverify`), пересобрать валидатор можно командой:
-> ```bash
-> export CC=/usr/bin/clang CXX=/usr/bin/clang++ AR=/usr/bin/ar RANLIB=/usr/bin/ranlib
-> cargo build --bin solana-test-validator
-> ```
+### 3. Start the local test validator
 
-## 2. Запуск тестового скрипта (Клиент)
+```bash
+cd agave
+RUST_LOG=warn ./target/debug/solana-test-validator --reset --log
+```
 
-Для тестов мы создали отдельную папку `demo-app` — это ваш третий независимый репозиторий/проект, который уже подключен к локально собранному `kit`.
+The `--reset` flag starts with a clean ledger. Logs are written to `test-ledger/validator.log`.
 
-Откройте **второй терминал**, перейдите в папку `demo-app` и запустите демо-скрипт командой `pnpm start` (она сама всё скомпилирует и выполнит):
+### 4. Run the demo (in a separate terminal)
 
 ```bash
 cd demo-app
+pnpm install
 pnpm start
 ```
 
----
+Expected output:
+```
+Starting demo...
+Sender address: ...
+Receiver address: ...
+Requesting airdrop...
+Sender balance: 7000000000 lamports
+Creating transfer transaction...
+Signing transaction...
+Transaction signature: ...
+first byte: 0x81            <-- V1 transaction!
+Sending and confirming transaction...
+Transaction confirmed!
+Receiver balance: 4000000000 lamports
+```
 
-### Что происходит под капотом `demo.ts`?
-1. Подключается к локальному валидатору по RPC (`http://127.0.0.1:8899`).
-2. Генерирует два стандартных (пока не PQC) Ed25519 кошелька: Отправитель и Получатель.
-3. Запрашивает 2 SOL (Airdrop) на аккаунт Отправителя.
-4. Собирает транзакцию перевода токенов.
-5. Подписывает ее и отправляет в сеть, дожидаясь подтверждения валидатора.
+### 5. Verify V1 in validator logs
 
-Убедитесь, что первый скрипт (демо) отрабатывает без ошибок. Как только базовый цикл заработает, мы сможем начать внедрять Falcon-ключи в клиентскую часть и парсер транзакций в ядро!
+```bash
+grep "PQC" agave/test-ledger/validator.log
+```
 
----
+You should see the full V1 pipeline trace: RPC -> SendTransactionService -> QUIC -> SigVerify -> Banking Stage.
 
-## 3. Просмотр блоков и транзакций (Solana Explorer)
+## What Was Changed
 
-Вы можете использовать официальный Solana Explorer для просмотра вашей локальной сети, как если бы это был настоящий Mainnet:
+See [V1_CHANGES.md](V1_CHANGES.md) for a detailed description of every change with code snippets.
 
-1. Убедитесь, что локальный валидатор запущен.
-2. Откройте в браузере [explorer.solana.com](https://explorer.solana.com/).
-3. В правом верхнем углу (где написано "Mainnet Beta") нажмите на выбор сети.
-4. Выберите **Custom RPC** и введите `http://127.0.0.1:8899`.
-5. Теперь вы можете вставлять адреса кошельков и подписи транзакций из вывода `demo.ts` в поиск Explorer'а, чтобы смотреть балансы, переводы и инспекцию блоков в реальном времени!
+**Summary:**
+- **Agave (validator):** Removed 3 V1 blockers + fixed a bug in `solana-transaction` crate where `message_data()` serialized V1 messages without the `0x81` version prefix, breaking signature verification
+- **Kit (client):** Removed type-level V1 restriction + exported `setTransactionMessageConfig`
 
-*(Помните: при перезапуске валидатора с флагом `--reset` вся история в Explorer для вашей сети обнулится).*
+## What the Demo Does
+
+1. Connects to the local validator via JSON-RPC (`http://127.0.0.1:8899`)
+2. Generates two Ed25519 keypairs (sender, receiver)
+3. Airdrops 7 SOL to sender
+4. Creates a **V1 transaction** (`version: 1`) with a SOL transfer instruction
+5. Sets V1-specific `TransactionConfig` (compute limits, loaded accounts data size)
+6. Signs, sends, and confirms the transaction **with preflight enabled**
+
+## Project Vision
+
+See [PROJECT.md](PROJECT.md) for the full project vision: hybrid quantum-resistant accounts for Solana using Falcon-512 (FN-DSA) signatures alongside Ed25519.
+
+## Viewing Transactions in Solana Explorer
+
+1. Make sure the local validator is running
+2. Open [explorer.solana.com](https://explorer.solana.com/)
+3. Select **Custom RPC** in the network dropdown (top right)
+4. Enter `http://127.0.0.1:8899`
+5. Paste transaction signatures from the demo output to inspect them
