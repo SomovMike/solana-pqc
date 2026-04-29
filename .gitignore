@@ -1,12 +1,12 @@
-# Forked repos (separate git repositories)
+# Forked repo (separate git repository)
 agave/
+
+# Deprecated (can be removed from disk)
 kit/
 
 # Build artifacts
 test-ledger/
-node_modules/
-*.js
-!demo-app/demo.js
+target/
 
 # OS
 .DS_Store

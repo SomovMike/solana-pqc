@@ -1,6 +1,6 @@
 # Enabling V1 Transactions: All Changes
 
-This document describes every change made to the Agave validator, the `@solana/kit` TypeScript client library, and the `solana-transaction` Rust crate to enable end-to-end V1 transaction support.
+This document describes every change made to the Agave validator and the `solana-transaction` Rust crate to enable end-to-end V1 transaction support.
 
 V1 transactions (SIMD-0385) use a **messageFirst** wire format (`[0x81 | message | signatures]`), unlike V0/Legacy which use **signaturesFirst** (`[signatures | message]`). This architecture is critical for future PQC (Post-Quantum Cryptography) integration, as it allows larger signatures without breaking the message parsing.
 
@@ -189,111 +189,6 @@ AR = { value = "/usr/bin/ar", force = true }
 
 ---
 
-## 2. Solana Kit (TypeScript Client) Changes
-
-### 2.1. Removed type-level V1 restriction
-
-**File:** `kit/packages/transaction-messages/src/create-transaction-message.ts`
-
-The `createTransactionMessage` function had a type alias that excluded version `1` from the allowed versions:
-
-**Before:**
-```typescript
-type SupportedTransactionVersion = Exclude<TransactionVersion, 1>;
-
-export function createTransactionMessage<TVersion extends SupportedTransactionVersion>(
-    config: TransactionConfig<TVersion>,
-): EmptyTransactionMessage<TVersion> { ... }
-```
-
-**After:**
-```typescript
-export function createTransactionMessage<TVersion extends TransactionVersion>(
-    config: TransactionConfig<TVersion>,
-): EmptyTransactionMessage<TVersion> { ... }
-```
-
-Now `createTransactionMessage({ version: 1 })` compiles without errors.
-
----
-
-### 2.2. Updated type tests for V1
-
-**File:** `kit/packages/transaction-messages/src/__typetests__/create-transaction-message-typetest.ts`
-
-Added type test confirming V1 transaction message creation works:
-
-```typescript
-type V1TransactionMessage = Extract<TransactionMessage, { version: 1 }>;
-
-// It creates v1 transaction messages.
-{
-    const message = createTransactionMessage({ version: 1 });
-    message satisfies V1TransactionMessage;
-}
-```
-
-Previously, this file had `@ts-expect-error` annotations for V1 that were removed.
-
----
-
-### 2.3. Exported `setTransactionMessageConfig`
-
-**File:** `kit/packages/transaction-messages/src/index.ts`
-
-The `setTransactionMessageConfig` function (and related V1 config types) were defined in `v1-transaction-config.ts` but not exported from the package.
-
-**Added:**
-```typescript
-export * from './v1-transaction-config';
-```
-
-This makes `setTransactionMessageConfig`, `V1TransactionConfig`, and related utilities available through `@solana/transaction-messages` and by extension `@solana/kit`.
-
----
-
-### 2.4. Removed `@ts-expect-error` annotations in transaction tests
-
-**Files:**
-- `kit/packages/transactions/src/__tests__/transaction-size-test.ts`
-- `kit/packages/transactions/src/__tests__/transaction-message-size-test.ts`
-
-These test files had `@ts-expect-error` comments on lines that created V1 transaction messages, since V1 was previously disallowed at the type level. These annotations were removed to allow V1 test cases to compile.
-
----
-
-## 3. Demo Application
-
-**File:** `demo-app/demo.ts`
-
-A working demo that sends a V1 SOL transfer on a local test validator:
-
-```typescript
-// Create V1 transaction message
-const txMessage = createTransactionMessage({ version: 1 });
-
-// Set V1-specific config (compute limits, loaded accounts data size)
-// Without this, the validator defaults these to 0 and rejects the tx
-let transactionMessage = setTransactionMessageConfig({
-    computeUnitLimit: 200_000,
-    loadedAccountsDataSizeLimit: 64 * 1024,
-}, txMessage);
-
-// Standard message building
-transactionMessage = setTransactionMessageFeePayer(sender.address, transactionMessage);
-transactionMessage = setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, transactionMessage);
-transactionMessage = appendTransactionMessageInstruction(transferInstruction, transactionMessage);
-
-// Sign and send (preflight enabled — works thanks to the solana-transaction patch)
-const signedTx = await signTransactionMessageWithSigners(transactionMessage);
-const sendAndConfirm = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions });
-await sendAndConfirm(signedTx, { commitment: 'confirmed' });
-```
-
-Key detail: `setTransactionMessageConfig` is required for V1 because unlike V0, V1 `TransactionConfig` fields default to `0` in the validator if not explicitly set. Without `loadedAccountsDataSizeLimit`, even a simple transfer fails with "Transaction exceeded max loaded accounts data size cap".
-
----
-
 ## Summary of Changes
 
 | # | Component | File | Change | Type |
@@ -305,8 +200,5 @@ Key detail: `setTransactionMessageConfig` is required for V1 because unlike V0, 
 | 5 | Agave | `Cargo.toml` | Added `[patch.crates-io]` for solana-transaction | Patching |
 | 6 | Agave | `.cargo/config.toml` | Fixed macOS build toolchain | Build fix |
 | 7 | Agave | Multiple files (rpc, sigverify, send-tx-service) | Added `[PQC-TRACE]` debug logging | Debug |
-| 8 | Kit | `create-transaction-message.ts` | Removed `Exclude<TransactionVersion, 1>` | Type fix |
-| 9 | Kit | `index.ts` | Exported `v1-transaction-config` | Export fix |
-| 10 | Kit | Type tests and unit tests | Removed `@ts-expect-error` for V1 | Test fix |
 
-**Total: 3 stub removals + 1 bug fix + 1 type restriction removal = 5 functional changes to enable V1 end-to-end.**
+**Total: 3 stub removals + 1 bug fix = 4 functional changes to enable V1 end-to-end.**

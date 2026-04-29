@@ -1,18 +1,24 @@
 # Solana PQC: Post-Quantum Cryptography for Solana
 
-Proof-of-concept enabling **V1 transactions** (SIMD-0385) on Solana as groundwork for Post-Quantum Cryptography integration.
+Proof-of-concept integrating **Falcon-512 post-quantum signatures** into Solana via **V1 transactions** (SIMD-0385).
 
-V1 transactions use a **messageFirst** wire format, which is essential for supporting larger PQC signatures (e.g., Falcon-512) that don't fit into the legacy signaturesFirst envelope.
+V1 transactions use a **messageFirst** wire format, which is essential for supporting larger PQC signatures (e.g., Falcon-512 at ~650 bytes) that don't fit into the legacy signaturesFirst envelope.
 
 ## Repository Structure
 
-This project spans 3 repositories:
-
 | Repository | Description |
 |-----------|-------------|
-| **[solana-pqc](https://github.com/SomovMike/solana-pqc)** (this repo) | Demo app, documentation |
-| **[agave](https://github.com/SomovMike/agave/tree/pqc/enable-v1)** (fork, branch `pqc/enable-v1`) | Modified Solana validator |
-| **[kit](https://github.com/SomovMike/kit/tree/pqc/enable-v1)** (fork, branch `pqc/enable-v1`) | Modified TypeScript client library |
+| **[solana-pqc](https://github.com/SomovMike/solana-pqc)** (this repo) | Rust demo, documentation |
+| **[agave](https://github.com/SomovMike/agave/tree/pqc/enable-v1)** (fork, branch `pqc/enable-v1`) | Modified Solana validator with PQC support |
+
+```
+solana-pqc/
+├── agave/           # Solana validator fork (git submodule / clone)
+├── pqc-demo/        # Rust demo — Falcon-512 & Ed25519 V1 transactions
+├── PQC_CHANGES.md   # Detailed changelog of all PQC integration changes
+├── V1_CHANGES.md    # V1 transaction support changelog
+└── PROJECT.md       # Full project vision
+```
 
 ## Quick Start
 
@@ -22,18 +28,6 @@ This project spans 3 repositories:
 git clone https://github.com/SomovMike/solana-pqc.git
 cd solana-pqc
 git clone -b pqc/enable-v1 https://github.com/SomovMike/agave.git
-git clone -b pqc/enable-v1 https://github.com/SomovMike/kit.git
-```
-
-This gives the required directory structure (the demo app references `../kit/` for TypeScript imports):
-
-```
-solana-pqc/
-├── agave/           # Solana validator fork
-├── kit/             # @solana/kit client library fork
-├── demo-app/        # V1 transaction demo
-├── PROJECT.md       # Full project vision
-└── V1_CHANGES.md    # Detailed changelog
 ```
 
 ### 2. Build the validator
@@ -54,54 +48,81 @@ RUST_LOG=warn ./target/debug/solana-test-validator --reset --log
 
 The `--reset` flag starts with a clean ledger. Logs are written to `test-ledger/validator.log`.
 
-### 4. Run the demo (in a separate terminal)
+### 4. Run the PQC demo (in a separate terminal)
+
+**Falcon-512 PQC transaction:**
 
 ```bash
-cd demo-app
-pnpm install
-pnpm start
+cd pqc-demo
+cargo run --bin pqc-demo
 ```
 
 Expected output:
 ```
-Starting demo...
-Sender address: ...
-Receiver address: ...
-Requesting airdrop...
-Sender balance: 7000000000 lamports
-Creating transfer transaction...
-Signing transaction...
-Transaction signature: ...
-first byte: 0x81            <-- V1 transaction!
-Sending and confirming transaction...
-Transaction confirmed!
-Receiver balance: 4000000000 lamports
+=== Solana PQC (Falcon-512) Transaction Demo ===
+
+Generating Falcon-512 keypair...
+  Falcon pubkey:    0913fab4249916273a1c6df3fc623c86... (897 bytes)
+  Solana address:   DvQjUSGChdLt41zLsC7KQpwN8369GCNXSCcMrCS89o6p
+  Receiver address: 6Uu44jk34kVnFi2Ggc7HD19igDMF36JiT7zTqeLEhs7Y
+
+Building V1 PQC transfer (1 SOL)...
+  Blockhash: ...
+  V1 body size: 155 bytes
+
+Signing with Falcon-512...
+  Falcon sig: 39a6d21da980ecd44c8eeab8a22961f4... (653 bytes)
+  Local verification: PASSED
+  Wire transaction: 1721 bytes
+  Proxy sig (txid): 3irgtfmJL8KBFaAhF6ftzqvCPJYRnbbN...
+
+Sending PQC transaction to RPC...
+  Transaction CONFIRMED!
 ```
 
-### 5. Verify V1 in validator logs
+You can also run in dry-run mode (no validator needed):
+
+```bash
+cargo run --bin pqc-demo -- --dry-run
+```
+
+**Ed25519 V1 smoke test** (verifies PQC changes don't break standard Ed25519):
+
+```bash
+cargo run --bin ed25519-demo
+```
+
+### 5. Verify PQC in validator logs
 
 ```bash
 grep "PQC" agave/test-ledger/validator.log
 ```
 
-You should see the full V1 pipeline trace: RPC -> SendTransactionService -> QUIC -> SigVerify -> Banking Stage.
+You should see the full PQC V1 pipeline trace: RPC -> SendTransactionService -> QUIC -> SigVerify -> Banking Stage.
 
 ## What Was Changed
 
-See [V1_CHANGES.md](V1_CHANGES.md) for a detailed description of every change with code snippets.
+See [PQC_CHANGES.md](PQC_CHANGES.md) for a detailed description of every change with code snippets.
 
 **Summary:**
-- **Agave (validator):** Removed 3 V1 blockers + fixed a bug in `solana-transaction` crate where `message_data()` serialized V1 messages without the `0x81` version prefix, breaking signature verification
-- **Kit (client):** Removed type-level V1 restriction + exported `setTransactionMessageConfig`
 
-## What the Demo Does
+- **`solana-pqc` crate** — Falcon-512 keypair generation, signing, verification, address derivation (SHA-256), proxy signatures, wire format helpers
+- **`transaction-view`** — Extended V1 config mask to include PQC bit 5, PQC wire parsing in `TransactionFrame`, pure-flag semantics
+- **`perf/sigverify`** — Falcon-512 signature verification path alongside Ed25519
+- **`rpc`** — V1-aware size limits, PQC wire detection, fast-path forwarding to TPU
+- **`transaction-view/sanitize`** — Signature count adjusted for PQC signer
 
-1. Connects to the local validator via JSON-RPC (`http://127.0.0.1:8899`)
-2. Generates two Ed25519 keypairs (sender, receiver)
-3. Airdrops 7 SOL to sender
-4. Creates a **V1 transaction** (`version: 1`) with a SOL transfer instruction
-5. Sets V1-specific `TransactionConfig` (compute limits, loaded accounts data size)
-6. Signs, sends, and confirms the transaction **with preflight enabled**
+See [V1_CHANGES.md](V1_CHANGES.md) for earlier V1 transaction support changes.
+
+## How It Works
+
+1. **Keypair generation** — Falcon-512 keypair via `pqcrypto-falcon`
+2. **Address derivation** — Solana address = `SHA-256(falcon_pubkey)` (897-byte key -> 32-byte address)
+3. **V1 message** — Standard SIMD-0385 format with **bit 5** set in `TransactionConfigMask` to signal PQC
+4. **Signing** — Falcon-512 signs `[0x81 || v1_body]`
+5. **Wire format** — `[0x81][v1_body][2B sig_len][897B falcon_pubkey][666B falcon_sig padded]`
+6. **Proxy signature** — `SHA-256(falcon_sig) || SHA-256(falcon_pubkey)` for PoH/txid compatibility (64 bytes)
+7. **Verification** — Validator extracts PQC blob, verifies Falcon-512 signature, checks address binding
 
 ## Project Vision
 
