@@ -5,7 +5,7 @@ edition = "2021"
 
 [[bin]]
 name = "pqc-demo"
-path = "src/main.rs"
+path = "src/falcon_demo.rs"
 
 [[bin]]
 name = "ed25519-demo"
