@@ -101,6 +101,7 @@ dependencies = [
  "curve25519-dalek-derive",
  "digest",
  "fiat-crypto",
+ "rand_core",
  "rustc_version",
  "subtle",
  "zeroize",
@@ -739,6 +740,7 @@ checksum = "21e14a4f604117f379840956a8fc8695e4c84f5b0ebed192f31f60d9b85d581d"
 name = "solana-pqc"
 version = "4.1.0-alpha.0"
 dependencies = [
+ "curve25519-dalek",
  "hex",
  "pqcrypto-falcon",
  "pqcrypto-traits",

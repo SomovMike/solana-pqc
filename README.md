@@ -13,11 +13,12 @@ V1 transactions use a **messageFirst** wire format, which is essential for suppo
 
 ```
 solana-pqc/
-├── agave/           # Solana validator fork (git submodule / clone)
-├── pqc-demo/        # Rust demo — Falcon-512 & Ed25519 V1 transactions
-├── PQC_CHANGES.md   # Detailed changelog of all PQC integration changes
-├── V1_CHANGES.md    # V1 transaction support changelog
-└── PROJECT.md       # Full project vision
+├── agave/               # Solana validator fork (git submodule / clone)
+├── pqc-demo/            # Rust demos — Falcon-512 & Ed25519 V1 transactions
+├── PQC_CHANGES.md       # Detailed changelog of all PQC integration changes
+├── PQC_DEBUG_FIXES.md   # Debug fixes for the PQC transaction pipeline
+├── V1_CHANGES.md        # V1 transaction support changelog
+└── PROJECT.md           # Full project vision
 ```
 
 ## Quick Start
@@ -48,47 +49,61 @@ RUST_LOG=warn ./target/debug/solana-test-validator --reset --log
 
 The `--reset` flag starts with a clean ledger. Logs are written to `test-ledger/validator.log`.
 
-### 4. Run the PQC demo (in a separate terminal)
+### 4. Run the demos (in a separate terminal)
 
-**Falcon-512 PQC transaction:**
+**Full demo (recommended)** — bidirectional transfers between Ed25519 and Falcon-512 wallets:
 
 ```bash
 cd pqc-demo
-cargo run --bin pqc-demo
+cargo run --bin full-demo
 ```
+
+This creates two wallets (Ed25519 + Falcon-512), airdrops 10 SOL, transfers 7 SOL from Ed25519 to PQC, then 2 SOL back from PQC to Ed25519.
 
 Expected output:
 ```
-=== Solana PQC (Falcon-512) Transaction Demo ===
+============================================================
+  Solana PQC Full Demo: Ed25519 <-> Falcon-512 Transfers
+============================================================
 
-Generating Falcon-512 keypair...
-  Falcon pubkey:    0913fab4249916273a1c6df3fc623c86... (897 bytes)
-  Solana address:   DvQjUSGChdLt41zLsC7KQpwN8369GCNXSCcMrCS89o6p
-  Receiver address: 6Uu44jk34kVnFi2Ggc7HD19igDMF36JiT7zTqeLEhs7Y
+[ Step 1 ] Generating wallets...
 
-Building V1 PQC transfer (1 SOL)...
-  Blockhash: ...
-  V1 body size: 155 bytes
+  Ed25519 wallet (standard):
+    Address: Jr1PpUWWz8BVcfrHnVFBhg1x9tPgoDPJQUb4nKiqPUM
+  Falcon-512 wallet (PQC):
+    Address: 68a2p1ERoa91wHskMoxoYkNkXbiCLGuEtBZTXvBbCyNZ
+    Falcon pubkey: 0928a99fb6b747d118bdbed98c4ef7ba... (897 bytes)
 
-Signing with Falcon-512...
-  Falcon sig: 39a6d21da980ecd44c8eeab8a22961f4... (653 bytes)
-  Local verification: PASSED
-  Wire transaction: 1721 bytes
-  Proxy sig (txid): 3irgtfmJL8KBFaAhF6ftzqvCPJYRnbbN...
+[ Step 2 ] Airdrop 10 SOL to Ed25519 wallet
+  Airdrop CONFIRMED!
 
-Sending PQC transaction to RPC...
+[ Step 3 ] Transfer 7 SOL: Ed25519 --> PQC
+  Wire size: 228 bytes
   Transaction CONFIRMED!
+
+[ Step 4 ] Transfer 2 SOL: PQC --> Ed25519
+  Wire size: 1721 bytes
+  Transaction CONFIRMED!
+
+  Final balances:
+    Ed25519: ~5 SOL (minus tx fees)
+    PQC:     5 SOL
+
+  All transfers completed successfully!
+  Post-quantum Falcon-512 signatures work on Solana.
+============================================================
 ```
 
-You can also run in dry-run mode (no validator needed):
+**Other demos:**
 
 ```bash
+# PQC-only demo (Falcon-512 keypair, airdrop, PQC transfer)
+cargo run --bin pqc-demo
+
+# PQC demo in dry-run mode (no validator needed)
 cargo run --bin pqc-demo -- --dry-run
-```
 
-**Ed25519 V1 smoke test** (verifies PQC changes don't break standard Ed25519):
-
-```bash
+# Ed25519-only V1 smoke test (verifies PQC changes don't break standard Ed25519)
 cargo run --bin ed25519-demo
 ```
 
@@ -103,14 +118,21 @@ You should see the full PQC V1 pipeline trace: RPC -> SendTransactionService -> 
 ## What Was Changed
 
 See [PQC_CHANGES.md](PQC_CHANGES.md) for a detailed description of every change with code snippets.
+See [PQC_DEBUG_FIXES.md](PQC_DEBUG_FIXES.md) for pipeline debug fixes that were needed to get PQC transactions fully confirmed.
 
-**Summary:**
+**PQC integration (Phase 1-8):**
 
 - **`solana-pqc` crate** — Falcon-512 keypair generation, signing, verification, address derivation (SHA-256), proxy signatures, wire format helpers
 - **`transaction-view`** — Extended V1 config mask to include PQC bit 5, PQC wire parsing in `TransactionFrame`, pure-flag semantics
 - **`perf/sigverify`** — Falcon-512 signature verification path alongside Ed25519
 - **`rpc`** — V1-aware size limits, PQC wire detection, fast-path forwarding to TPU
 - **`transaction-view/sanitize`** — Signature count adjusted for PQC signer
+
+**Pipeline debug fixes:**
+
+- **`streamer/quic`** — Increased QUIC stream size limit from 1232 to 4096 bytes for PQC transactions
+- **`transaction-view/resolved_transaction_view`** — Added proxy signature storage and `SVMTransaction` implementation for PQC
+- **`runtime-transaction`** — Fixed V1 transaction config defaults (`compute_unit_limit` and `loaded_accounts_data_size_limit` now default to max instead of 0)
 
 See [V1_CHANGES.md](V1_CHANGES.md) for earlier V1 transaction support changes.
 

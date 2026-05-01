@@ -11,6 +11,10 @@ path = "src/falcon_demo.rs"
 name = "ed25519-demo"
 path = "src/ed25519_demo.rs"
 
+[[bin]]
+name = "full-demo"
+path = "src/full_demo.rs"
+
 [dependencies]
 solana-pqc = { path = "../agave/pqc" }
 base64 = "0.22"
