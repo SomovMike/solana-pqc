@@ -4,16 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "pqc-demo"
-path = "src/falcon_demo.rs"
-
-[[bin]]
-name = "ed25519-demo"
-path = "src/ed25519_demo.rs"
-
-[[bin]]
-name = "full-demo"
-path = "src/full_demo.rs"
+name = "demo"
+path = "src/demo.rs"
 
 [dependencies]
 solana-pqc = { path = "../agave/pqc" }
