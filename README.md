@@ -2,8 +2,6 @@
 
 Proof-of-concept integrating **Falcon-512 post-quantum signatures** into Solana via **V1 transactions** (SIMD-0385).
 
-V1 transactions use a **messageFirst** wire format, which is essential for supporting larger PQC signatures (e.g., Falcon-512 at ~650 bytes) that don't fit into the legacy signaturesFirst envelope.
-
 ## Repository Structure
 
 | Repository | Description |
