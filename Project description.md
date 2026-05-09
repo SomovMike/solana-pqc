@@ -22,9 +22,9 @@
 
 ## 1. Project Vision
 
-We are creating a **prototype of native post-quantum protection** for Solana at the validator core level (Layer 0). This is not a smart contract and not a program — it is a modification of the blockchain engine itself, allowing it to natively understand and verify signatures of the **Falcon-512** (FN-DSA) algorithm alongside the classical Ed25519.
+We are creating a prototype of native post-quantum protection for Solana at the validator core level (Layer 0). This is not a smart contract and not a program — it is a modification of the blockchain engine itself, allowing it to natively understand and verify signatures of the Falcon-512 (FN-DSA) algorithm alongside the classical Ed25519.
 
-The goal is not to completely replace Ed25519, but to **add a new type of accounts**: quantum-resistant "vaults" for long-term storage of large amounts.
+The goal is not to completely replace Ed25519, but to add a new type of accounts: quantum-resistant "vaults" for long-term storage of large amounts.
 
 ---
 
@@ -34,14 +34,14 @@ The goal is not to completely replace Ed25519, but to **add a new type of accoun
 
 | Algorithm | What it attacks | Threat to Solana |
 |----------|----------------|------------------|
-| **Shor** | Elliptic curves (Ed25519, ECDSA, BLS) | allows computing the private key from the public key | **Critical** — breaks all signatures |
-| **Grover** | Hash functions (SHA-256) | quadratic speedup of brute force | **Minimal** — SHA-256 remains at 128-bit security |
+| Shor | Elliptic curves (Ed25519, ECDSA, BLS) | allows computing the private key from the public key | **Critical** — breaks all signatures |
+| Grover | Hash functions (SHA-256) | quadratic speedup of brute force | **Minimal** — SHA-256 remains at 128-bit security |
 
 This means that PDA accounts (based on SHA-256) remain secure, while EOA accounts (based on Ed25519) do not.
 
 ### Quantum Threat for Solana is Unique
 While quantum computers pose a huge threat to all major blockchain platforms, Solana's architecture introduces specific peculiarities that must be taken into account.
-Unlike Bitcoin, where the public key is hidden behind a hash (P2WPKH) until the first spend, **each Solana address is itself an Ed25519 public key**.
+Unlike Bitcoin, where the public key is hidden behind a hash (P2WPKH) until the first spend, each Solana address is itself an Ed25519 public key.
 This means that Solana has no "hidden" layer of protection.
 As soon as a quantum computer capable of running Shor's algorithm emerges, all existing Solana accounts will become vulnerable: without exception and without requiring any prior transaction.
 
@@ -84,17 +84,17 @@ Funds are transferred to a standard classical account via a single Falcon-secure
 ### User Flow
 
 1. The user creates a **PQC Vault** — generates a Falcon key pair and obtains a 32-byte address (`SHA-256(falcon_pubkey || bump)`, off-curve).
-2. The main capital is stored in the PQC Vault: SOL, stablecoins, valuable tokens.
+2. The majority of funds are stored in the PQC Vault: SOL, stablecoins, valuable tokens.
 3. When interaction with DeFi or trading on a DEX is needed:
    - The user performs **one simple PQC transaction**: transferring the required amount from Vault → Hot Wallet.
-   - From the Hot Wallet, the user performs any number of complex transactions (swaps, liquidity provision, NFT minting, etc.).
+   - From the Hot Wallet, the user performs any number of complex transactions (swaps, liquidity provision, NFT minting, multi-signature transactions, etc.).
 4. The remaining balance is returned to the Vault via a regular Ed25519 transfer.
 
 ### Why This Works
 
-- **PQC transactions are heavy** (~1785 bytes total wire size), but for a simple wallet-to-wallet transfer, the V1 transaction format is sufficient.
-- **Complex DeFi transactions** (multiple instructions, CPI, multiple signers) remain on Ed25519 and do not lose performance.
-- This is an **analogy to cold storage + hot wallet** in traditional finance, but with a quantum-protected "cold" layer.
+- PQC transactions are heavy (~1785 bytes total wire size), but for a simple wallet-to-wallet transfer, the V1 transaction format is sufficient.
+- Complex DeFi transactions (multiple instructions, CPI, multiple signers) remain on Ed25519 and do not lose performance.
+- This is an analogy to cold storage + hot wallet in traditional finance, but with a quantum-protected "cold" layer.
 
 ## 4. Why Falcon (FN-DSA)
 
@@ -102,7 +102,7 @@ NIST has standardized (or is in the process of standardizing) several PQC signat
 
 | Scheme | Public Key | Signature | NIST Status | Suitable for Solana? |
 |--------|------------|-----------|-------------|----------------------|
-| **Ed25519** (current) | 32 B | 64 B | — | Yes (not PQC) |
+| **Ed25519** (current) | 32 B | 64 B | Standard | Yes (not PQC) |
 | **ML-DSA** (Dilithium) | 1312 B | 2560 B | Standard | No — 2560B signature does not fit in a V1 transaction with payload |
 | **FN-DSA (Falcon-512)** | 897 B | ≤666 B | Draft | **Yes** — best balance of size/security |
 | **SLH-DSA** (SPHINCS+) | 64 B | 7856 B | Standard | No — 7856B exceeds entire V1 limit |
@@ -111,7 +111,7 @@ NIST has standardized (or is in the process of standardizing) several PQC signat
 **Falcon-512 is the only practical choice** for Solana right now:
 
 - Total PQC trailer (sig_len + pubkey + signature) = **1565 bytes** — fits into a V1 transaction with room for payload.
-- ML-DSA would require ~3873 bytes just for the header, leaving too little space for even a simple transfer.
+- ML-DSA would require ~3873 bytes just for the pubkey+signature, leaving too little space for even a simple transfer.
 - 128-bit post-quantum security (equivalent to today's Ed25519).
 
 > **Important:** FN-DSA is currently a NIST draft, not a finalized standard. For production, this requires additional evaluation. For a prototype and proof of concept, it is the optimal choice.
@@ -142,16 +142,16 @@ Not all Solana accounts are equally vulnerable. Understanding this is key to set
 | **DeFi Vaults (liquidity pools, lending, etc.)** | These are PDAs. The majority of TVL in Solana DeFi (Raydium, Orca, Marginfi, Kamino) is stored in PDA accounts |
 | **Immutable programs** | Programs with revoked upgrade authority cannot be modified by anyone, even with a quantum computer |
 | **Blockhash, Merkle Trees** | Based on SHA-256 — Grover only gives quadratic speedup, leaving ~128-bit security |
-| **Seed phrases** | Keys are derived via one-way KDF. Shor cannot invert hash functions. A quantum attacker can obtain a private key, but **not** the seed phrase |
+| **Seed phrases** | Keys are derived via one-way KDF. Shor cannot invert hash functions. A quantum attacker can obtain a private key, but not the seed phrase |
 
-### Key Insight
+### Summary
 
 A large portion of TVL in the Solana DeFi ecosystem is already protected from quantum attacks by design, because funds are stored in PDAs.
 However, administrative keys of protocols (upgrade authority, mint authority) remain vulnerable.
 
 An attacker cannot directly break a PDA, but if they compute the private key of the upgrade authority, they can replace the program code with malicious logic and drain funds.
 
-**Our PQC Vault solves the problem of user wallets.** The same approach applies to protocol authority keys: upgrade authority can also be a Falcon address, protecting the program from quantum code substitution.
+**Our PQC Vault solves the problem of user wallets.** The same approach applies to protocol authority keys: upgrade authority can also be a Falcon address, protecting the program from code substitution attacks by quantum computers.
 
 ---
 
@@ -167,9 +167,8 @@ A quantum attack on Ed25519 is not instantaneous.
 Even optimistic estimates suggest that a quantum computer would require hours to execute Shor's algorithm for a single key.
 This is a targeted attack on a single public key with enormous computational cost rather than a mass instant break.
 
-Lifetime of funds in Hot Wallet: 5–30 minutes (transfer → operations → return)
+Lifetime of funds in Hot Wallet: 5–30 minutes (transfer → operations → return);
 Quantum attack time on key: hours — days (Shor on Ed25519)
-
 
 Spending hours of quantum computation to intercept funds that disappear in 5 minutes is an economic absurdity.
 
@@ -198,7 +197,7 @@ The project consists of two components interacting over the network:
 │   Client (Rust)              │ ◀──────────────────────▶   │   Validator (Rust / Agave)   │
 │                              │     RPC :8899              │                              │
 │  • Falcon key generation     │     TPU :8000              │  • Receives V1 packets       │
-│  • SHA-256(pk||bump) → addr  │                            │  • Parses TransactionConfig   │
+│  • SHA-256(pk||bump) → addr  │                            │  • Parses TransactionConfig  │
 │  • Builds V1 transaction     │                            │  • Detects PQC flag (bit 5)  │
 │  • Signs with Falcon         │                            │  • Extracts Falcon trailer   │
 │  • Proxy sig in slot 0       │                            │  • AuthScheme::Falcon verify │
@@ -261,14 +260,14 @@ The demo builds V1 wire bytes manually, including the `TransactionConfigMask` wi
 
 ## 8. How It Works
 
-### V1 Transaction Format
+### Falcon-based V1 Transaction Format
 
-PQC transactions use the **V1 wire format** (SIMD-0385), which has a fundamentally different layout from legacy/V0 — the message body comes first, then signatures at the end, with an optional PQC trailer:
+PQC transactions use the **V1 wire format** (SIMD-0385), which has a fundamentally different layout from legacy/V0 — the message body comes first, then signatures at the end. Falcon-based V1 transaction has an optional PQC trailer:
 
 #### Standard Ed25519 V1 Transaction
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Version byte: 0x81 (1 byte)                     V1 prefix  │
+│ Version byte: 0x81 (1 byte)                     V1 prefix   │
 ├─────────────────────────────────────────────────────────────┤
 │ V1 Message Body:                                            │
 │   ├─ MessageHeader (3 bytes)                                │
@@ -280,18 +279,18 @@ PQC transactions use the **V1 wire format** (SIMD-0385), which has a fundamental
 │   ├─ ConfigValues (variable, based on mask bits 0-4)        │
 │   ├─ InstructionHeaders + Payloads                          │
 ├─────────────────────────────────────────────────────────────┤
-│ Signatures (num_required_sigs × 64 bytes)  Ed25519 sigs    │
+│ Signatures (num_required_sigs × 64 bytes)  Ed25519 sigs     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 #### PQC Falcon-512 V1 Transaction
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Version byte: 0x81 (1 byte)                     V1 prefix  │
+│ Version byte: 0x81 (1 byte)                     V1 prefix   │
 ├─────────────────────────────────────────────────────────────┤
 │ V1 Message Body:                                            │
 │   ├─ MessageHeader (3 bytes)                                │
-│   ├─ TransactionConfigMask (4 bytes, u32 LE)  bit 5 = PQC  │
+│   ├─ TransactionConfigMask (4 bytes, u32 LE)  bit 5 = PQC   │
 │   ├─ Blockhash (32 bytes)                                   │
 │   ├─ NumInstructions (1 byte)                               │
 │   ├─ NumAddresses (1 byte)                                  │
@@ -304,7 +303,7 @@ PQC transactions use the **V1 wire format** (SIMD-0385), which has a fundamental
 │   SHA256(falcon_sig)[0:32] || SHA256(falcon_pubkey)[0:32]   │
 ├─────────────────────────────────────────────────────────────┤
 │ PQC Falcon Trailer (1565 bytes):                            │
-│   ├─ sig_len (2 bytes, u16 LE)      actual sig length ≤666 │
+│   ├─ sig_len (2 bytes, u16 LE)      actual sig length ≤666  │
 │   ├─ falcon_pubkey (897 bytes)      Falcon-512 public key   │
 │   └─ falcon_sig_padded (666 bytes)  zero-padded to max len  │
 └─────────────────────────────────────────────────────────────┘
@@ -631,15 +630,7 @@ These problems are not solved in our prototype, but we acknowledge their existen
 
 ---
 
-### 4. Mass User Migration
-
-**Essence**: To transfer funds to a PQC address, the user must sign a transaction with their current Ed25519 key, the same key that becomes vulnerable. This is a race against time: if a quantum computer appears before migration is completed, unprotected accounts will be compromised.
-
-**For our prototype**: We propose a simple and practical migration approach for EOA accounts, without requiring radical network changes.
-
----
-
-### 5. FN-DSA Standardization
+### 4. FN-DSA Standardization
 
 **Essence**: Falcon (FN-DSA) is currently a NIST draft, not a finalized standard. More efficient schemes (e.g., HAWK) may appear in the future.
 
@@ -647,7 +638,7 @@ These problems are not solved in our prototype, but we acknowledge their existen
 
 ---
 
-### 6. Wallets and Ecosystem
+### 5. Wallets and Ecosystem
 
 **Essence**: No existing wallets (Phantom, Solflare, Backpack) support Falcon keys. Real-world usage will require:
 - PQC integration in wallets
