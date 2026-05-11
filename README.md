@@ -16,8 +16,9 @@ solana-pqc/
 └── pqc-demo/            # Rust demo — Falcon-512 & Ed25519 V1 transactions
 ```
 
-### Documentation (`docs/`)
+### Documentation
 
+`Project description.md` conatains detailed description of the whole project
 The `docs/` folder contains detailed breakdowns of how PQC is integrated into the Solana validator pipeline:
 - `rpc-pqc-transaction-pipeline.md` — RPC transaction ingestion and forwarding
 - `tpu-pqc-sigverify-pipeline.md` — Signature verification in the TPU
